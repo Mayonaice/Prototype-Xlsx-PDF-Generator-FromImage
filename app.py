@@ -13,7 +13,8 @@ from sqlalchemy.orm import sessionmaker
 import uuid
 from io import BytesIO
 import openpyxl
-from config import DB_CONFIG, APP_CONFIG
+from config import DATABASE_URL, APP_CONFIG
+import sqlite3
 
 UPLOAD_FOLDER = 'temp_uploads'
 OUTPUT_FOLDER = 'output'
@@ -28,10 +29,8 @@ MYSQL_PASSWORD = 'Vadodali2245'
 MYSQL_HOST = 'localhost'
 MYSQL_DATABASE = 'xlsx_n_pdf_generator_db'
 
-# Setup database MySQL
-DATABASE_URL = f"mysql+mysqlconnector://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
+# Setup database
 engine = create_engine(DATABASE_URL)
-
 Base = declarative_base()
 
 class ImageRecord(Base):
@@ -185,8 +184,49 @@ def generate_pdf(records, image_paths):
     c.save()
     return pdf_path
 
+def check_database():
+    try:
+        # Connect to SQLite database
+        conn = sqlite3.connect('app.db')
+        
+        # Get table information
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = cursor.fetchall()
+        
+        st.subheader("Database Information")
+        
+        for table in tables:
+            with st.expander(f"Table: {table[0]}"):
+                # Get table structure
+                cursor.execute(f"PRAGMA table_info({table[0]});")
+                columns = cursor.fetchall()
+                st.write("Columns:")
+                for col in columns:
+                    st.write(f"- {col[1]} ({col[2]})")
+                
+                # Get table data
+                cursor.execute(f"SELECT * FROM {table[0]};")
+                rows = cursor.fetchall()
+                st.write(f"Total rows: {len(rows)}")
+                
+                if rows:
+                    # Convert to DataFrame for better display
+                    df = pd.DataFrame(rows, columns=[col[0] for col in cursor.description])
+                    st.dataframe(df)
+        
+    except Exception as e:
+        st.error(f"Error checking database: {str(e)}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
 def main():
     st.title("Image Upload and Processing System")
+    
+    # Add database check button
+    if st.sidebar.button("Check Database"):
+        check_database()
     
     # Upload multiple files
     uploaded_files = st.file_uploader("Upload Images", type=['jpg', 'jpeg', 'png'], accept_multiple_files=True)
