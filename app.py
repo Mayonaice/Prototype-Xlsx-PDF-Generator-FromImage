@@ -13,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 import uuid
 from io import BytesIO
 import openpyxl
+from config import DB_CONFIG, APP_CONFIG
 
 UPLOAD_FOLDER = 'temp_uploads'
 OUTPUT_FOLDER = 'output'
@@ -28,7 +29,7 @@ MYSQL_HOST = 'localhost'
 MYSQL_DATABASE = 'xlsx_n_pdf_generator_db'
 
 # Setup database MySQL
-DATABASE_URL = f"mysql+mysqlconnector://{MYSQL_USERNAME}:{MYSQL_PASSWORD}@{MYSQL_HOST}/{MYSQL_DATABASE}"
+DATABASE_URL = f"mysql+mysqlconnector://{DB_CONFIG['user']}:{DB_CONFIG['password']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}"
 engine = create_engine(DATABASE_URL)
 
 Base = declarative_base()
@@ -47,7 +48,7 @@ Session = sessionmaker(bind=engine)
 
 def generate_excel(records, image_paths):
     # Buat Excel writer
-    excel_path = os.path.join(OUTPUT_FOLDER, f'image_records_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
+    excel_path = os.path.join(APP_CONFIG['output_folder'], f'image_records_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx')
     writer = pd.ExcelWriter(excel_path, engine='openpyxl')
     
     # Buat DataFrame untuk data
@@ -108,11 +109,11 @@ def generate_excel(records, image_paths):
     return excel_path
 
 def generate_pdf(records, image_paths):
-    pdf_path = os.path.join(OUTPUT_FOLDER, f'image_records_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf')
+    pdf_path = os.path.join(APP_CONFIG['output_folder'], f'image_records_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf')
     c = canvas.Canvas(pdf_path, pagesize=letter)
     width, height = letter
     
-    for record, img_path in zip(records, image_paths):
+    for idx, (record, img_path) in enumerate(zip(records, image_paths)):
         if os.path.exists(img_path):
             # Buka gambar
             img = Image.open(img_path)
@@ -141,13 +142,17 @@ def generate_pdf(records, image_paths):
             x = (width - new_width) / 2
             y = height - new_height - 50  # 50px dari atas
             
+            # Buat nama file temporary yang unik untuk setiap gambar
+            img_temp = f"temp_img_{idx}.png"
+            
             # Simpan gambar ke temporary file
-            img_temp = "temp_img.png"
             img.save(img_temp)
             
             # Gambar gambar di PDF
             c.drawImage(img_temp, x, y, width=new_width, height=new_height, preserveAspectRatio=True)
-            os.remove(img_temp)  # Hapus file temporary
+            
+            # Hapus file temporary
+            os.remove(img_temp)
             
             # Tambahkan informasi di bawah gambar
             y -= 30  # Jarak antara gambar dan teks
@@ -170,6 +175,10 @@ def generate_pdf(records, image_paths):
                 text_width = c.stringWidth(line, "Helvetica", 10)
                 c.drawString((width - text_width) / 2, y, line)
                 y -= 15
+            
+            # Tambahkan nomor halaman
+            c.setFont("Helvetica", 8)
+            c.drawString(width - 50, 20, f"Page {idx + 1}")
             
             c.showPage()
     
@@ -267,8 +276,8 @@ def main():
                         )
                 
                 # Kosongkan folder sementara
-                shutil.rmtree(UPLOAD_FOLDER)
-                os.makedirs(UPLOAD_FOLDER)
+                shutil.rmtree(APP_CONFIG['upload_folder'])
+                os.makedirs(APP_CONFIG['upload_folder'])
                 
                 st.experimental_rerun()
                 
