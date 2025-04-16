@@ -13,9 +13,15 @@ from sqlalchemy.orm import sessionmaker
 import uuid
 from io import BytesIO
 import openpyxl
-from config import DATABASE_URL, APP_CONFIG
+import logging
 import sqlite3
+from config import DATABASE_URL, APP_CONFIG
 
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Konfigurasi folder
 UPLOAD_FOLDER = 'temp_uploads'
 OUTPUT_FOLDER = 'output'
 
@@ -23,11 +29,8 @@ OUTPUT_FOLDER = 'output'
 for folder in [UPLOAD_FOLDER, OUTPUT_FOLDER]:
     os.makedirs(folder, exist_ok=True)
 
-# Konfigurasi MySQL
-MYSQL_USERNAME = 'root'
-MYSQL_PASSWORD = 'Vadodali2245'
-MYSQL_HOST = 'localhost'
-MYSQL_DATABASE = 'xlsx_n_pdf_generator_db'
+# Konfigurasi SQLite
+DATABASE_URL = 'sqlite:///xlsx_n_pdf_generator_db.db'
 
 # Setup database
 engine = create_engine(DATABASE_URL)
@@ -185,12 +188,18 @@ def generate_pdf(records, image_paths):
     return pdf_path
 
 def check_database():
+    # Form password popup
+    password = st.text_input("Masukkan Password", type="password")
+    if password != "Kepo@123":
+        st.error("Password salah!")
+        return
+    
     try:
         # Connect to SQLite database
-        conn = sqlite3.connect('app.db')
+        conn = sqlite3.connect('xlsx_n_pdf_generator_db.db')
+        cursor = conn.cursor()
         
         # Get table information
-        cursor = conn.cursor()
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = cursor.fetchall()
         
@@ -214,6 +223,36 @@ def check_database():
                     # Convert to DataFrame for better display
                     df = pd.DataFrame(rows, columns=[col[0] for col in cursor.description])
                     st.dataframe(df)
+        
+        # Tambahkan opsi untuk mengelola database
+        st.subheader("Database Management")
+        
+        # Export database
+        if st.button("Export Database"):
+            with open('xlsx_n_pdf_generator_db.db', 'rb') as f:
+                st.download_button(
+                    "Download Database",
+                    f,
+                    file_name='xlsx_n_pdf_generator_db.db',
+                    mime="application/x-sqlite3"
+                )
+        
+        # Import database
+        uploaded_db = st.file_uploader("Import Database", type=['db'])
+        if uploaded_db:
+            if st.button("Replace Current Database"):
+                with open('xlsx_n_pdf_generator_db.db', 'wb') as f:
+                    f.write(uploaded_db.getbuffer())
+                st.success("Database berhasil diimport!")
+                st.experimental_rerun()
+        
+        # Clear database
+        if st.button("Clear Database", type="primary"):
+            if st.checkbox("Saya yakin ingin menghapus semua data"):
+                cursor.execute("DELETE FROM images;")
+                conn.commit()
+                st.success("Database berhasil dibersihkan!")
+                st.experimental_rerun()
         
     except Exception as e:
         st.error(f"Error checking database: {str(e)}")
